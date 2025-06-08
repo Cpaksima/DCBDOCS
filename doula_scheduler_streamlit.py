@@ -4,12 +4,6 @@ import calendar
 from datetime import datetime, timedelta
 import random
 
-[theme]
-primaryColor="#ffffff"  # Example primary color
-backgroundColor="#000000"  # Example background color
-secondaryBackgroundColor="#f9f7f3"  # Example secondary background color
-textColor="#3f4e63"  # Example text color
-
 st.set_page_config(page_title="Doula On-Call Scheduler", layout="wide")
 
 if "submissions" not in st.session_state:
