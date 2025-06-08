@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import calendar
@@ -50,65 +49,77 @@ def balanced_schedule(submissions, month, year):
     day_labels = [f"{month[:3]} {d.day}" for d in date_list]
     schedule = pd.DataFrame(index=day_labels, columns=[f"{i}st On Call" if i==1 else f"{i}nd On Call" if i==2 else f"{i}rd On Call" if i==3 else f"{i}th On Call" for i in range(1,5)])
 
-    # Track assignments
     assigned_count = {name: 0 for name in doulas}
     assigned_rank_count = {name: [0,0,0,0] for name in doulas}
-    last_assigned_day = {name: -3 for name in doulas}  # will store last day index assigned (so -3 allows assignment on first day)
+    last_assigned_day = {name: -3 for name in doulas}
+    # Track for the new rule: who was 4th on call yesterday
+    fourth_on_call_yesterday = set()
 
-    # Build the full schedule for each day, each rank
-    # Pass 1: Assign 1st On Call by requested births, enforcing non-consecutive and availability
     for day_idx, date in enumerate(date_list):
-        candidates = []
-        for name in doulas:
-            day_label = f"{month[:3]} {date.day}"
-            if (
-                assigned_count[name] < requested.get(name, 0)
-                and assigned_rank_count[name][0] < requested.get(name, 0)
-                and day_label not in unavailable[name]
-                and day_idx - last_assigned_day[name] > 1
-            ):
-                candidates.append(name)
-        # If not enough, consider anyone who is available and hasn't done 1st On Call the day before
-        if not candidates:
-            for name in doulas:
-                day_label = f"{month[:3]} {date.day}"
-                if (
-                    day_label not in unavailable[name]
-                    and day_idx - last_assigned_day[name] > 1
-                ):
-                    candidates.append(name)
-        # Pick least used, then random for fairness
-        if candidates:
-            min_used = min([assigned_count[n] for n in candidates])
-            min_candidates = [n for n in candidates if assigned_count[n]==min_used]
-            chosen = random.choice(min_candidates)
-            schedule.iloc[day_idx, 0] = chosen
-            assigned_count[chosen] += 1
-            assigned_rank_count[chosen][0] += 1
-            last_assigned_day[chosen] = day_idx
+        # Build a set of doulas ineligible today due to being 4th on call yesterday
+        ineligible_today = set(fourth_on_call_yesterday)
+        fourth_on_call_yesterday = set()  # Will update this at the end of today's assignments
 
-    # Pass 2–4: Assign 2nd, 3rd, 4th On Call (cannot repeat any doula that day, not consecutive, not unavailable, spread evenly)
-    for rank in range(2, 5):
-        for day_idx, date in enumerate(date_list):
-            already = [schedule.iloc[day_idx, r] for r in range(rank-1)]
+        # Assign each on-call position (1st to 4th) for today
+        assigned_today = []
+        for rank in range(1,5):
+            # Determine eligible doulas for this slot
             candidates = []
             for name in doulas:
                 day_label = f"{month[:3]} {date.day}"
+                # Exclude if assigned already today, unavailable, ineligible due to yesterday 4th-on-call, or for 1st slot, need to balance requested
                 if (
-                    name not in already
+                    name not in assigned_today
                     and day_label not in unavailable[name]
-                    and day_idx - last_assigned_day.get((name, rank), -3) > 1
+                    and name not in ineligible_today
                 ):
-                    candidates.append(name)
-            if candidates:
-                # Spread as evenly as possible
+                    # For 1st slot, try to hit requested number (then overflow if needed)
+                    if rank == 1:
+                        if assigned_count[name] < requested.get(name, 0) and assigned_rank_count[name][0] < requested.get(name, 0) and day_idx - last_assigned_day[name] > 1:
+                            candidates.append(name)
+                    else:
+                        # For 2nd-4th, cannot be assigned same person as any earlier slot today and not on consecutive days for this rank
+                        if day_idx - last_assigned_day.get((name, rank), -3) > 1:
+                            candidates.append(name)
+
+            # If not enough for 1st slot, allow overflow (just need not ineligible, not assigned today, not unavailable, not consecutive)
+            if rank == 1 and not candidates:
+                for name in doulas:
+                    day_label = f"{month[:3]} {date.day}"
+                    if (
+                        name not in assigned_today
+                        and day_label not in unavailable[name]
+                        and name not in ineligible_today
+                        and day_idx - last_assigned_day[name] > 1
+                    ):
+                        candidates.append(name)
+
+            # If still empty, leave blank (shouldn't happen unless all doulas unavailable)
+            if not candidates:
+                continue
+
+            # Choose among least-assigned for this rank, break ties randomly
+            if rank == 1:
+                min_used = min([assigned_count[n] for n in candidates])
+                min_candidates = [n for n in candidates if assigned_count[n]==min_used]
+                chosen = random.choice(min_candidates)
+                assigned_count[chosen] += 1
+                assigned_rank_count[chosen][0] += 1
+                last_assigned_day[chosen] = day_idx
+            else:
                 count_for_rank = [assigned_rank_count[n][rank-1] for n in candidates]
                 min_count = min(count_for_rank)
                 min_candidates = [n for n in candidates if assigned_rank_count[n][rank-1] == min_count]
                 chosen = random.choice(min_candidates)
-                schedule.iloc[day_idx, rank-1] = chosen
                 assigned_rank_count[chosen][rank-1] += 1
                 last_assigned_day[(chosen, rank)] = day_idx
+
+            schedule.iloc[day_idx, rank-1] = chosen
+            assigned_today.append(chosen)
+
+            # For 4th on call, remember for tomorrow's ineligibility
+            if rank == 4:
+                fourth_on_call_yesterday = set([chosen])
 
     return schedule, assigned_rank_count
 
