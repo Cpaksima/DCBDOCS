@@ -18,14 +18,18 @@ def am_pm_options(month, num_days):
 
 if menu == "Submit Availability":
     st.header("Doula Availability Submission Form")
-    with st.form("doula_form", clear_on_submit=True):
-        name = st.text_input("Doula Full Name", key="name")
-        births = st.number_input("Requested Number of Births", min_value=0, max_value=31, value=4, key="births")
-        month = st.selectbox("Select Month", list(calendar.month_name)[1:], index=datetime.now().month-1, key="form_month")
-        year = st.selectbox("Select Year", list(range(datetime.now().year, datetime.now().year + 3)), index=0, key="form_year")
-        num_days = calendar.monthrange(year, list(calendar.month_name).index(month))[1]
-        day_options = [f"{month[:3]} {i}" for i in range(1, num_days + 1)]
 
+    # ---- Month, Year, Name, Births outside form ----
+    name = st.text_input("Doula Full Name", key="name")
+    births = st.number_input("Requested Number of Births", min_value=0, max_value=31, value=4, key="births")
+    month = st.selectbox("Select Month", list(calendar.month_name)[1:], index=datetime.now().month-1, key="form_month")
+    year = st.selectbox("Select Year", list(range(datetime.now().year, datetime.now().year + 3)), index=0, key="form_year")
+
+    num_days = calendar.monthrange(year, list(calendar.month_name).index(month))[1]
+    day_options = [f"{month[:3]} {i}" for i in range(1, num_days + 1)]
+
+    # ---- Form: only day-dependent fields ----
+    with st.form("doula_form", clear_on_submit=True):
         unavailable_dates = st.multiselect(
             "Unavailable Dates",
             options=day_options,
